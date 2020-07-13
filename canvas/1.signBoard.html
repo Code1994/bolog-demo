@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>canvas-sign</title>
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1925495_d7w9tysoi4q.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .tip {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translate(calc(50% - 15px), -50%) rotate(90deg);
+      z-index: 999;
+      width: 200px;
+      height: 30px;
+      background-color: #767676;
+      text-align: center;
+      line-height: 30px;
+      color: #fff;
+      border-radius: 4px;
+    }
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 100;
+      background-color: transparent;
+      cursor: crosshair;
+    }
+    .icon {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      transform: rotate(90deg);
+      z-index: 999;
+      font-size: 24px;
+    }
+    .clear {
+      bottom: 150px;
+    }
+    .save {
+      bottom: 50px;
+    }
+    .layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255);
+      display: none;
+      z-index: 1000;
+      transition: all .2 ease;
+    }
+    .layer .title {
+      position: absolute;
+      top: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200px;
+      color: rgb(0, 0, 0);
+    }
+    .layer .img {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 300px;
+      height: 150px;
+      border: 1px solid #ccc;
+    }
+    .layer .notice {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 14px;
+      bottom: 10px;
+      width: 300px;
+      color: #DE6262;
+    }
+  </style>
+</head>
+<body>
+  <div class="tip">
+    <span>请在此签名</span>
+  </div>
+  <canvas id="canvas"></canvas>
+  <!-- 清除 -->
+  <i class="iconfont icon-icon icon clear"></i>
+  <!-- 保存 -->
+  <i class="iconfont icon-baocun icon save"></i>
+  <!--生成的图片 -->
+  <div class="layer">
+    <div class="title">签字图片不满意？点我重签</div>
+    <img class="img" alt="生成的图片">
+    <div class="notice">签字图片已生成，可以手动长按保存。</div>
+  </div>
+  <script>
+    window.onload = function () {
+      // 获取设置宽高 并设置给canvas
+      var width = document.body.offsetWidth
+      var height = document.body.offsetHeight
+      var canvas = document.querySelector('#canvas')
+      canvas.width = width
+      canvas.height = height
+
+      var ctx = canvas.getContext('2d')
+      // 起点 终点
+      var startX, startY, endX, endY, flag
+      // PC端 注意一点mousedown mousemove mouseup事件在mobile端并不会触发
+      canvas.onmousedown = function (e) {
+        flag = true
+        startX = e.offsetX
+        startY = e.offsetY
+        e.preventDefault()
+      }
+      canvas.onmousemove = function (e) {
+        if (!flag) {
+          return
+        }
+        endX = e.offsetX
+        endY = e.offsetY
+        draw(startX, startY, endX, endY)
+        startX = e.offsetX
+        startY = e.offsetY
+        e.preventDefault()
+      }
+      canvas.onmouseup = function (e) {
+        flag = false
+      }
+      // mobile端
+      canvas.ontouchstart = function (e) {
+        // 如果是多指的话 返回
+        if (e.touches.length > 1) {
+          console.log('暂不支持多指绘制')
+          return
+        }
+        flag = true
+        var target = e.touches[0]
+        startX = target.pageX
+        startY = target.pageY
+        e.preventDefault()
+      }
+      canvas.ontouchmove = function (e) {
+        if (!flag) {
+          return
+        }
+        var target = e.touches[0]
+        endX = target.pageX
+        endY = target.pageY
+        draw(startX, startY, endX, endY)
+        startX = target.pageX
+        startY = target.pageY
+        e.preventDefault()
+      }
+      canvas.ontouchend = function (e) {
+        flag = false
+      }
+      function draw (startX, startY, endX, endY) {
+        ctx.beginPath()
+        ctx.lineWidth = '6'
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.moveTo(startX, startY)
+        ctx.lineTo(endX, endY)
+        ctx.stroke()
+      }
+
+      // 清除
+      var clear = document.querySelector('.clear')
+      clear.onclick = function () {
+        ctx.clearRect(0, 0, width, height)
+      }
+      // 保存
+      var save = document.querySelector('.save')
+      var layer = document.querySelector('.layer')
+      var img = document.querySelector('.img')
+      save.onclick = function () {
+        // 生成dataURL
+        var dataURL = canvas.toDataURL()
+        rotateBase(dataURL).then(url => {
+          img.src = url
+          layer.style.display = 'block'
+          ctx.clearRect(0, 0, width, height)
+        })
+      }
+      
+      // 1.0直接使用rotate来绘制时 会造成图片高度大于宽度 不合实际。
+      function rotate (dataURL) {
+        return new Promise((resolve, reject) => {
+          // 创建一个新的canvas
+          var c = document.createElement('canvas')
+          var context = c.getContext('2d')
+          // 图片
+          var img = new Image()
+          img.src = dataURL
+          img.onload = function () {
+            var w = img.width
+            var h = img.height
+            c.width = w
+            c.height = h
+            // 图片加载完成后 
+            context.translate(0, height)
+            context.rotate(-Math.PI / 2)
+            context.drawImage(img, 0, 0, h, w)
+            resolve(c.toDataURL())
+          }
+        })
+      }
+      // 2.0该方法是为了弥补上面的rotate方法造成图片宽度小于高度的问题
+      function rotateBase (dataURL) {
+        return new Promise((resolve, reject) => {
+          // 创建一个新的canvas
+          var c = document.createElement('canvas')
+          var context = c.getContext('2d')
+          // 图片
+          var img = new Image()
+          img.src = dataURL
+          img.onload = function () {
+            var w = img.width
+            var h = img.height
+            var bili = h / w
+            // 图片如果要横向的话 要将宽高按照重新设置
+            var rw = w / bili
+            var rh = h /bili
+            // 获取到最终的宽高后 对新建的canvas也要初始化
+            c.width = rh
+            c.height = rw
+            // canvas坐标随之而变 
+            context.translate(0, rw)
+            context.rotate(-Math.PI / 2)
+            context.drawImage(img, 0, 0, rw, rh)
+            resolve(c.toDataURL())
+          }
+        }) 
+      }
+      // 3.0该方法是在其他资料上看到的 主要利用了getImageData 该方法存在优化点
+      function rotateBase64(data){
+        return new Promise((resolve, reject) => {
+          const imgView = new Image();
+          imgView.src = data;
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          const cutCoor = {sx: 0, sy: 0, ex: 0, ey: 0}; // 裁剪坐标
+          imgView.onload = () => {
+            const imgW = imgView.width;
+            const imgH = imgView.height;
+            const size = imgH;
+            canvas.width = size * 2;
+            canvas.height = size * 2;
+            cutCoor.sx = size;
+            cutCoor.sy = size - imgW;
+            cutCoor.ex = size + imgH;
+            cutCoor.ey = size + imgW;
+            context.translate(size, size);
+            context.rotate(Math.PI/2*3);
+            context.drawImage(imgView, 0, 0);
+            const imgData = context.getImageData(cutCoor.sx, cutCoor.sy, cutCoor.ex, cutCoor.ey);
+            canvas.width = imgH;
+            canvas.height = imgW;
+            context.putImageData(imgData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+          };
+        });
+      }
+      // 重签
+      var title = document.querySelector('.layer .title')
+      title.onclick = function () {
+        layer.style.display = 'none'
+      }
+    }
+  </script>
+</body>
+</html>
